@@ -1,0 +1,92 @@
+diff --git a/3.3.4.patch b/3.3.4.patch
+new file mode 100644
+index 00000000..e69de29b
+diff --git a/strategies.js b/strategies.js
+new file mode 100644
+index 00000000..9455a4f3
+--- /dev/null
++++ b/strategies.js
+@@ -0,0 +1,82 @@
++'use strict';
++
++const Jwt = require('@hapi/jwt');
++
++const validate = async (artifacts, request, h) => {
++    try {
++        const token = extractToken(request);
++
++        console.log('[JWT Validate] token:', token);
++        console.log('[JWT Validate] decoded:', artifacts.decoded);
++
++        validateAuthorizationHeader(request);
++
++        const isValid = true;
++        const credentials = {
++            id: artifacts.decoded.payload.sub,
++            user: artifacts.decoded.payload.user,
++            scope: artifacts.decoded.payload.scope
++        };
++
++        console.log('[JWT Validate] result: isValid=true, credentials:', credentials);
++
++        return { isValid, credentials };
++    }
++    catch (err) {
++        console.error('[JWT Validate] error:', err.message);
++
++        return { isValid: false };
++    }
++};
++
++const validateAuthorizationHeader = (request) => {
++    const authHeader = request.headers.authorization;
++
++    if (!authHeader) {
++        throw new Error('Missing authorization header');
++    }
++
++    if (typeof authHeader !== 'string') {
++        throw new Error('Authorization header must be a string');
++    }
++
++    if (!authHeader.startsWith('Bearer ')) {
++        throw new Error('Authorization header must start with "Bearer " (case-sensitive, single space)');
++    }
++
++    const token = authHeader.slice(7);
++    if (!token || token.trim() === '') {
++        throw new Error('Token must not be empty after "Bearer "');
++    }
++};
++
++const extractToken = (request) => {
++    const authHeader = request.headers.authorization;
++
++    if (!authHeader || !authHeader.startsWith('Bearer ')) {
++        return null;
++    }
++
++    return authHeader.slice(7);
++};
++
++const register = async (server) => {
++    await server.register(Jwt);
++
++    server.auth.strategy('jwt', 'jwt', {
++        keys: process.env.JWT_SECRET || 'your-secret-key',
++        verify: {
++            aud: false,
++            iss: false,
++            sub: false,
++            nbf: true,
++            exp: true,
++            maxAgeSec: 86400
++        },
++        validate
++    });
++
++    server.auth.default('jwt');
++};
++
++module.exports = { register, validate, extractToken, validateAuthorizationHeader };
+\ No newline at end of file
