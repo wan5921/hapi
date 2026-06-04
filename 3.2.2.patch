@@ -1,0 +1,13 @@
+diff --git a/package.json b/package.json
+index d27533e6..713ff22b 100755
+--- a/package.json
++++ b/package.json
+@@ -42,8 +42,6 @@
+     "@hapi/teamwork": "^6.0.1",
+     "@hapi/topo": "^6.0.2",
+     "@hapi/validate": "^2.0.1"
+-  },
+-  "devDependencies": {
+     "@hapi/code": "^9.0.3",
+     "@hapi/eslint-plugin": "^6.0.0",
+     "@hapi/inert": "^7.1.0",
