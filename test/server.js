@@ -14,7 +14,6 @@ const Lab = require('@hapi/lab');
 const Vision = require('@hapi/vision');
 const Wreck = require('@hapi/wreck');
 
-const Pkg = require('../package.json');
 
 
 const internals = {};
@@ -3109,6 +3108,7 @@ internals.plugins = {
                     authenticate: (request, h) => {
 
                         const req = request.raw.req;
+                        const req = request.raw.req;
                         const authorization = req.headers.authorization;
                         if (!authorization) {
                             throw Boom.unauthorized(null, 'Basic');
@@ -3119,25 +3119,20 @@ internals.plugins = {
                         if (parts[0] &&
                             parts[0].toLowerCase() !== 'basic') {
 
-                            throw Boom.unauthorized(null, 'Basic');
-                        }
-
-                        if (parts.length !== 2) {
-                            throw Boom.badRequest('Bad HTTP authentication header format', 'Basic');
-                        }
-
                         const credentialsParts = Buffer.from(parts[1], 'base64').toString().split(':');
                         if (credentialsParts.length !== 2) {
                             throw Boom.badRequest('Bad header internal syntax', 'Basic');
-                        }
+                        if (parts.length !== 2) {
 
                         const username = credentialsParts[0];
                         const password = credentialsParts[1];
-
+                        const credentialsParts = Buffer.from(parts[1], 'base64').toString().split(':');
+                        if (credentialsParts.length !== 2) {
                         const { isValid, credentials } = settings.validateFunc(username, password);
                         if (!isValid) {
                             return h.unauthenticated(Boom.unauthorized('Bad username or password', 'Basic'), { credentials });
-                        }
+                        const username = credentialsParts[0];
+                        const password = credentialsParts[1];
 
                         return h.authenticated({ credentials });
                     }

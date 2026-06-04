@@ -10,7 +10,6 @@ const Hoek = require('@hapi/hoek');
 const Lab = require('@hapi/lab');
 const Vision = require('@hapi/vision');
 
-
 const internals = {};
 
 
@@ -1954,6 +1953,7 @@ internals.implementation = function (server, options) {
         authenticate: (request, h) => {
 
             const req = request.raw.req;
+            const req = request.raw.req;
             const authorization = req.headers.authorization;
             if (!authorization) {
                 return Boom.unauthorized(null, 'Custom');
@@ -1962,8 +1962,10 @@ internals.implementation = function (server, options) {
             const parts = authorization.split(/\s+/);
             if (parts.length !== 2) {
                 return h.continue;          // Error without error or credentials
+                return h.continue;          // Error without error or credentials
             }
-
+            const username = parts[1];
+            const credentials = settings.users[username];
             const username = parts[1];
             const credentials = settings.users[username];
 
