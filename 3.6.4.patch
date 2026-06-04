@@ -1,0 +1,160 @@
+diff --git a/package.json b/package.json
+index d27533e6..2aa70e11 100755
+--- a/package.json
++++ b/package.json
+@@ -55,7 +55,7 @@
+     "handlebars": "^4.7.9",
+     "joi": "^17.13.3",
+     "legacy-readable-stream": "npm:readable-stream@^1.0.34",
+-    "typescript": "^5.9.3"
++    "sinon": "^17.0.1"
+   },
+   "scripts": {
+     "test": "lab -a @hapi/code -t 100 -L -m 5000 -Y",
+diff --git a/routes/user.js b/routes/user.js
+new file mode 100644
+index 00000000..28d22984
+--- /dev/null
++++ b/routes/user.js
+@@ -0,0 +1,36 @@
++const Hapi = require('@hapi/hapi');
++
++// 模拟的外部函数，用于从 token 获取用户
++const getUserFromToken = async (token) => {
++    // 真实场景下这里会有数据库调用
++    return null;
++};
++
++const route = {
++    method: 'GET',
++    path: '/api/user/profile',
++    handler: async (request, h) => {
++        const token = request.headers.authorization;
++        
++        if (!token) {
++            return h.response({ message: 'Missing token' }).code(401);
++        }
++
++        try {
++            const user = await module.exports.getUserFromToken(token);
++            
++            if (user === null) {
++                return h.response({ message: 'User not found' }).code(404);
++            }
++            
++            return h.response({ user }).code(200);
++        } catch (err) {
++            return h.response({ message: 'Invalid token' }).code(401);
++        }
++    }
++};
++
++module.exports = {
++    route,
++    getUserFromToken
++};
+\ No newline at end of file
+diff --git a/test/user.js b/test/user.js
+new file mode 100644
+index 00000000..d058c9eb
+--- /dev/null
++++ b/test/user.js
+@@ -0,0 +1,97 @@
++'use strict';
++
++const Code = require('@hapi/code');
++const Hapi = require('..');
++const Lab = require('@hapi/lab');
++const Sinon = require('sinon');
++
++const UserRoute = require('../routes/user');
++
++
++const { describe, it, afterEach } = exports.lab = Lab.script();
++const expect = Code.expect;
++
++
++describe('GET /api/user/profile', () => {
++
++    afterEach(() => {
++
++        Sinon.restore();
++    });
++
++    it('returns 401 when token is missing', async () => {
++
++        const server = Hapi.server();
++        server.route(UserRoute.route);
++
++        const res = await server.inject({
++            method: 'GET',
++            url: '/api/user/profile'
++        });
++
++        expect(res.statusCode).to.equal(401);
++        expect(res.result.message).to.equal('Missing token');
++    });
++
++    it('returns 401 when token is invalid', async () => {
++
++        Sinon.stub(UserRoute, 'getUserFromToken').rejects(new Error('Invalid token'));
++
++        const server = Hapi.server();
++        server.route(UserRoute.route);
++
++        const res = await server.inject({
++            method: 'GET',
++            url: '/api/user/profile',
++            headers: {
++                authorization: 'invalid_token'
++            }
++        });
++
++        expect(res.statusCode).to.equal(401);
++        expect(res.result.message).to.equal('Invalid token');
++    });
++
++    it('returns 404 when token is valid but user does not exist', async () => {
++
++        Sinon.stub(UserRoute, 'getUserFromToken').resolves(null);
++
++        const server = Hapi.server();
++        server.route(UserRoute.route);
++
++        const res = await server.inject({
++            method: 'GET',
++            url: '/api/user/profile',
++            headers: {
++                authorization: 'valid_token_no_user'
++            }
++        });
++
++        expect(res.statusCode).to.equal(404);
++        expect(res.result.message).to.equal('User not found');
++    });
++
++    it('returns 200 with user object when token is valid and user exists', async () => {
++
++        const mockUser = { id: 1, name: 'Alice', email: 'alice@example.com' };
++
++        Sinon.stub(UserRoute, 'getUserFromToken').resolves(mockUser);
++
++        const server = Hapi.server();
++        server.route(UserRoute.route);
++
++        const res = await server.inject({
++            method: 'GET',
++            url: '/api/user/profile',
++            headers: {
++                authorization: 'valid_token'
++            }
++        });
++
++        expect(res.statusCode).to.equal(200);
++        expect(res.result.user).to.equal(mockUser);
++        expect(res.result.user.id).to.equal(1);
++        expect(res.result.user.name).to.equal('Alice');
++        expect(res.result.user.email).to.equal('alice@example.com');
++    });
++});
+\ No newline at end of file
