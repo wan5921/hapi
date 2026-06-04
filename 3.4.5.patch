@@ -1,0 +1,133 @@
+diff --git a/3.4.5.patch b/3.4.5.patch
+new file mode 100644
+index 00000000..e69de29b
+diff --git a/plugins/auth-utils.js b/plugins/auth-utils.js
+new file mode 100644
+index 00000000..98d2825e
+--- /dev/null
++++ b/plugins/auth-utils.js
+@@ -0,0 +1,28 @@
++'use strict';
++
++const Boom = require('@hapi/boom');
++
++
++const internals = {};
++
++
++exports.getUserFromToken = function (request) {
++
++    if (!request.auth ||
++        !request.auth.isAuthenticated) {
++
++        throw Boom.unauthorized('Missing authentication');
++    }
++
++    const credentials = request.auth.credentials;
++    if (!credentials) {
++        throw Boom.unauthorized('Missing credentials');
++    }
++
++    const user = credentials.user;
++    if (!user) {
++        throw Boom.forbidden('Application credentials cannot be used on a user endpoint');
++    }
++
++    return user;
++};
+diff --git a/routes/admin.js b/routes/admin.js
+new file mode 100644
+index 00000000..09dbe437
+--- /dev/null
++++ b/routes/admin.js
+@@ -0,0 +1,50 @@
++'use strict';
++
++const Boom = require('@hapi/boom');
++
++const AuthUtils = require('../plugins/auth-utils');
++
++
++const internals = {};
++
++
++exports.routes = [
++    {
++        method: 'GET',
++        path: '/admin/users',
++        options: {
++            auth: 'default'
++        },
++        handler: (request) => {
++
++            const user = AuthUtils.getUserFromToken(request);
++
++            const credentials = request.auth.credentials;
++            const scope = credentials.scope;
++            if (!scope || (Array.isArray(scope) && !scope.includes('admin')) || scope !== 'admin') {
++                throw Boom.forbidden('Insufficient scope');
++            }
++
++            return { users: [], requestedBy: user.id || user };
++        }
++    },
++    {
++        method: 'DELETE',
++        path: '/admin/users/{userId}',
++        options: {
++            auth: 'default'
++        },
++        handler: (request) => {
++
++            const user = AuthUtils.getUserFromToken(request);
++
++            const credentials = request.auth.credentials;
++            const scope = credentials.scope;
++            if (!scope || (Array.isArray(scope) && !scope.includes('admin')) || scope !== 'admin') {
++                throw Boom.forbidden('Insufficient scope');
++            }
++
++            return { deleted: request.params.userId, deletedBy: user.id || user };
++        }
++    }
++];
+diff --git a/routes/profile.js b/routes/profile.js
+new file mode 100644
+index 00000000..c4d07607
+--- /dev/null
++++ b/routes/profile.js
+@@ -0,0 +1,34 @@
++'use strict';
++
++const AuthUtils = require('../plugins/auth-utils');
++
++
++const internals = {};
++
++
++exports.routes = [
++    {
++        method: 'GET',
++        path: '/profile',
++        options: {
++            auth: 'default'
++        },
++        handler: (request) => {
++
++            const user = AuthUtils.getUserFromToken(request);
++            return { id: user.id || user, name: user.name || user };
++        }
++    },
++    {
++        method: 'PUT',
++        path: '/profile',
++        options: {
++            auth: 'default'
++        },
++        handler: (request) => {
++
++            const user = AuthUtils.getUserFromToken(request);
++            return { id: user.id || user, updated: true };
++        }
++    }
++];
