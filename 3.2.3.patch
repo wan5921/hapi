@@ -1,0 +1,156 @@
+diff --git a/3.2.3.patch b/3.2.3.patch
+new file mode 100644
+index 00000000..e69de29b
+diff --git a/routes/user.js b/routes/user.js
+new file mode 100644
+index 00000000..d419d30c
+--- /dev/null
++++ b/routes/user.js
+@@ -0,0 +1,48 @@
++'use strict';
++
++const Joi = require('joi');
++const crypto = require('crypto');
++
++const internals = {
++    users: [] // Simple in-memory store for demonstration
++};
++
++module.exports = {
++    method: 'POST',
++    path: '/api/register',
++    options: {
++        validate: {
++            payload: Joi.object({
++                username: Joi.string().min(3).required(),
++                email: Joi.string().email().required(),
++                password: Joi.string().min(6).required()
++            })
++            // Hapi automatically returns 400 Bad Request with error details on validation failure
++        }
++    },
++    handler: async (request, h) => {
++
++        const { username, email, password } = request.payload;
++
++        // Hash password using crypto as a built-in alternative to bcrypt
++        const salt = crypto.randomBytes(16).toString('hex');
++        const hashedPassword = crypto.pbkdf2Sync(password, salt, 1000, 64, 'sha512').toString('hex');
++
++        const newUser = {
++            id: internals.users.length + 1,
++            username,
++            email,
++            password: hashedPassword,
++            salt
++        };
++
++        internals.users.push(newUser);
++
++        // Exclude password and salt from the response
++        return h.response({
++            id: newUser.id,
++            username: newUser.username,
++            email: newUser.email
++        }).code(201);
++    }
++};
+diff --git a/test/user.js b/test/user.js
+new file mode 100644
+index 00000000..f7bb447a
+--- /dev/null
++++ b/test/user.js
+@@ -0,0 +1,93 @@
++'use strict';
++
++const Code = require('@hapi/code');
++const Lab = require('@hapi/lab');
++const Hapi = require('..');
++const UserRoute = require('../routes/user.js');
++
++const { describe, it } = exports.lab = Lab.script();
++const expect = Code.expect;
++
++describe('POST /api/register', () => {
++
++    const buildServer = () => {
++
++        const server = Hapi.server();
++        server.route(UserRoute);
++        return server;
++    };
++
++    it('returns 201 and user info on successful registration', async () => {
++
++        const server = buildServer();
++        const res = await server.inject({
++            method: 'POST',
++            url: '/api/register',
++            payload: {
++                username: 'testuser',
++                email: 'test@example.com',
++                password: 'password123'
++            }
++        });
++
++        expect(res.statusCode).to.equal(201);
++        expect(res.result).to.include(['id', 'username', 'email']);
++        expect(res.result.username).to.equal('testuser');
++        expect(res.result.email).to.equal('test@example.com');
++        expect(res.result.password).to.not.exist(); // Ensure password is not returned
++    });
++
++    it('returns 400 when email is invalid', async () => {
++
++        const server = buildServer();
++        const res = await server.inject({
++            method: 'POST',
++            url: '/api/register',
++            payload: {
++                username: 'testuser',
++                email: 'invalid-email',
++                password: 'password123'
++            }
++        });
++
++        expect(res.statusCode).to.equal(400);
++        expect(res.result.error).to.equal('Bad Request');
++        expect(res.result.message).to.contain('"email" must be a valid email');
++    });
++
++    it('returns 400 when username is too short', async () => {
++
++        const server = buildServer();
++        const res = await server.inject({
++            method: 'POST',
++            url: '/api/register',
++            payload: {
++                username: 'ab',
++                email: 'test@example.com',
++                password: 'password123'
++            }
++        });
++
++        expect(res.statusCode).to.equal(400);
++        expect(res.result.error).to.equal('Bad Request');
++        expect(res.result.message).to.contain('"username" length must be at least 3 characters long');
++    });
++
++    it('returns 400 when password is too short', async () => {
++
++        const server = buildServer();
++        const res = await server.inject({
++            method: 'POST',
++            url: '/api/register',
++            payload: {
++                username: 'testuser',
++                email: 'test@example.com',
++                password: '12345'
++            }
++        });
++
++        expect(res.statusCode).to.equal(400);
++        expect(res.result.error).to.equal('Bad Request');
++        expect(res.result.message).to.contain('"password" length must be at least 6 characters long');
++    });
++});
