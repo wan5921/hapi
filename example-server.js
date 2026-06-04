@@ -1,7 +1,7 @@
 'use strict';
 
-const Hapi = require('./lib');
-const { registerRoute } = require('./routes/user');
+const Hapi = require('.');
+const { routes } = require('./routes/user');
 
 const init = async () => {
 
@@ -10,18 +10,16 @@ const init = async () => {
         host: 'localhost'
     });
 
-    server.route(registerRoute);
+    // 注册用户路由
+    server.route(routes);
 
     await server.start();
     console.log('Server running on %s', server.info.uri);
 };
 
 process.on('unhandledRejection', (err) => {
-
     console.log(err);
     process.exit(1);
 });
 
 init();
-
-module.exports = init;
