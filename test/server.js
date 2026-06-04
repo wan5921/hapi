@@ -14,6 +14,7 @@ const Lab = require('@hapi/lab');
 const Vision = require('@hapi/vision');
 const Wreck = require('@hapi/wreck');
 
+const { getUserFromToken } = require('../plugins/auth-utils');
 const Pkg = require('../package.json');
 
 
@@ -3108,31 +3109,35 @@ internals.plugins = {
                 return {
                     authenticate: (request, h) => {
 
-                        const req = request.raw.req;
-                        const authorization = req.headers.authorization;
-                        if (!authorization) {
+                        const auth = getUserFromToken(request.raw.req.headers.authorization, {
+                            scheme: 'Basic',
+                            parseToken: (token) => {
+
+                                const credentialsParts = Buffer.from(token, 'base64').toString().split(':');
+                                if (credentialsParts.length !== 2) {
+                                    return null;
+                                }
+
+                                return {
+                                    username: credentialsParts[0],
+                                    password: credentialsParts[1]
+                                };
+                            }
+                        });
+
+                        if (auth.isMissing || auth.isInvalidScheme) {
                             throw Boom.unauthorized(null, 'Basic');
                         }
 
-                        const parts = authorization.split(/\s+/);
-
-                        if (parts[0] &&
-                            parts[0].toLowerCase() !== 'basic') {
-
-                            throw Boom.unauthorized(null, 'Basic');
-                        }
-
-                        if (parts.length !== 2) {
+                        if (auth.isMalformed) {
                             throw Boom.badRequest('Bad HTTP authentication header format', 'Basic');
                         }
 
-                        const credentialsParts = Buffer.from(parts[1], 'base64').toString().split(':');
-                        if (credentialsParts.length !== 2) {
+                        if (!auth.user) {
                             throw Boom.badRequest('Bad header internal syntax', 'Basic');
                         }
 
-                        const username = credentialsParts[0];
-                        const password = credentialsParts[1];
+                        const { username, password } = auth.user;
 
                         const { isValid, credentials } = settings.validateFunc(username, password);
                         if (!isValid) {

@@ -10,6 +10,7 @@ const Hoek = require('@hapi/hoek');
 const Lab = require('@hapi/lab');
 const Vision = require('@hapi/vision');
 
+const { getUserFromToken } = require('../plugins/auth-utils');
 
 const internals = {};
 
@@ -1953,19 +1954,16 @@ internals.implementation = function (server, options) {
     const scheme = {
         authenticate: (request, h) => {
 
-            const req = request.raw.req;
-            const authorization = req.headers.authorization;
-            if (!authorization) {
+            const auth = getUserFromToken(request.raw.req.headers.authorization, { users: settings.users });
+            if (auth.isMissing) {
                 return Boom.unauthorized(null, 'Custom');
             }
 
-            const parts = authorization.split(/\s+/);
-            if (parts.length !== 2) {
-                return h.continue;          // Error without error or credentials
+            if (auth.isMalformed) {
+                return h.continue;
             }
 
-            const username = parts[1];
-            const credentials = settings.users[username];
+            const credentials = auth.user;
 
             if (!credentials) {
                 throw Boom.unauthorized('Missing credentials', 'Custom');
