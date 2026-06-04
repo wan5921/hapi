@@ -1,0 +1,132 @@
+diff --git a/3.4.2.patch b/3.4.2.patch
+new file mode 100644
+index 00000000..e69de29b
+diff --git a/plugins/auth-utils.js b/plugins/auth-utils.js
+new file mode 100644
+index 00000000..46f1f5e0
+--- /dev/null
++++ b/plugins/auth-utils.js
+@@ -0,0 +1,25 @@
++'use strict';
++
++exports.getUserFromToken = function (authorization, options = {}) {
++
++    if (!authorization) {
++        return { isMissing: true };
++    }
++
++    const parts = authorization.split(/\s+/);
++    if (parts.length !== 2) {
++        return { isMalformed: true, parts };
++    }
++
++    if (options.scheme &&
++        parts[0] &&
++        parts[0].toLowerCase() !== options.scheme.toLowerCase()) {
++
++        return { isInvalidScheme: true, parts };
++    }
++
++    const token = parts[1];
++    const user = options.parseToken ? options.parseToken(token) : options.users?.[token];
++
++    return { token, user, parts };
++};
+diff --git a/test/auth.js b/test/auth.js
+index a9a22e09..1b8b859d 100755
+--- a/test/auth.js
++++ b/test/auth.js
+@@ -10,6 +10,7 @@ const Hoek = require('@hapi/hoek');
+ const Lab = require('@hapi/lab');
+ const Vision = require('@hapi/vision');
+ 
++const { getUserFromToken } = require('../plugins/auth-utils');
+ 
+ const internals = {};
+ 
+@@ -1953,19 +1954,16 @@ internals.implementation = function (server, options) {
+     const scheme = {
+         authenticate: (request, h) => {
+ 
+-            const req = request.raw.req;
+-            const authorization = req.headers.authorization;
+-            if (!authorization) {
++            const auth = getUserFromToken(request.raw.req.headers.authorization, { users: settings.users });
++            if (auth.isMissing) {
+                 return Boom.unauthorized(null, 'Custom');
+             }
+ 
+-            const parts = authorization.split(/\s+/);
+-            if (parts.length !== 2) {
+-                return h.continue;          // Error without error or credentials
++            if (auth.isMalformed) {
++                return h.continue;
+             }
+ 
+-            const username = parts[1];
+-            const credentials = settings.users[username];
++            const credentials = auth.user;
+ 
+             if (!credentials) {
+                 throw Boom.unauthorized('Missing credentials', 'Custom');
+diff --git a/test/server.js b/test/server.js
+index 94e95fc0..93247394 100755
+--- a/test/server.js
++++ b/test/server.js
+@@ -14,6 +14,7 @@ const Lab = require('@hapi/lab');
+ const Vision = require('@hapi/vision');
+ const Wreck = require('@hapi/wreck');
+ 
++const { getUserFromToken } = require('../plugins/auth-utils');
+ const Pkg = require('../package.json');
+ 
+ 
+@@ -3108,31 +3109,35 @@ internals.plugins = {
+                 return {
+                     authenticate: (request, h) => {
+ 
+-                        const req = request.raw.req;
+-                        const authorization = req.headers.authorization;
+-                        if (!authorization) {
+-                            throw Boom.unauthorized(null, 'Basic');
+-                        }
++                        const auth = getUserFromToken(request.raw.req.headers.authorization, {
++                            scheme: 'Basic',
++                            parseToken: (token) => {
+ 
+-                        const parts = authorization.split(/\s+/);
++                                const credentialsParts = Buffer.from(token, 'base64').toString().split(':');
++                                if (credentialsParts.length !== 2) {
++                                    return null;
++                                }
+ 
+-                        if (parts[0] &&
+-                            parts[0].toLowerCase() !== 'basic') {
++                                return {
++                                    username: credentialsParts[0],
++                                    password: credentialsParts[1]
++                                };
++                            }
++                        });
+ 
++                        if (auth.isMissing || auth.isInvalidScheme) {
+                             throw Boom.unauthorized(null, 'Basic');
+                         }
+ 
+-                        if (parts.length !== 2) {
++                        if (auth.isMalformed) {
+                             throw Boom.badRequest('Bad HTTP authentication header format', 'Basic');
+                         }
+ 
+-                        const credentialsParts = Buffer.from(parts[1], 'base64').toString().split(':');
+-                        if (credentialsParts.length !== 2) {
++                        if (!auth.user) {
+                             throw Boom.badRequest('Bad header internal syntax', 'Basic');
+                         }
+ 
+-                        const username = credentialsParts[0];
+-                        const password = credentialsParts[1];
++                        const { username, password } = auth.user;
+ 
+                         const { isValid, credentials } = settings.validateFunc(username, password);
+                         if (!isValid) {
