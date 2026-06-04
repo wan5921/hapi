@@ -1,0 +1,135 @@
+diff --git a/3.4.3.patch b/3.4.3.patch
+new file mode 100644
+index 00000000..e69de29b
+diff --git a/plugins/auth-utils.js b/plugins/auth-utils.js
+new file mode 100644
+index 00000000..2cbcd8d0
+--- /dev/null
++++ b/plugins/auth-utils.js
+@@ -0,0 +1,19 @@
++'use strict';
++
++function getUserFromToken(token) {
++    if (!token) {
++        return null;
++    }
++    // Simple mock implementation
++    if (token === 'valid-token-user1') {
++        return { id: 1, username: 'user1', role: 'user' };
++    }
++    if (token === 'valid-token-admin') {
++        return { id: 2, username: 'admin', role: 'admin' };
++    }
++    return null;
++}
++
++module.exports = {
++    getUserFromToken
++};
+diff --git a/routes/order.js b/routes/order.js
+new file mode 100644
+index 00000000..f25131e1
+--- /dev/null
++++ b/routes/order.js
+@@ -0,0 +1,18 @@
++'use strict';
++
++const { getUserFromToken } = require('../plugins/auth-utils');
++
++function getOrders(req, res) {
++    const token = req.headers && req.headers.authorization;
++    const user = getUserFromToken(token);
++    
++    if (!user) {
++        return res.status(401).json({ error: 'Unauthorized' });
++    }
++    
++    return res.status(200).json({ orders: [{ id: 101, item: 'Book' }] });
++}
++
++module.exports = {
++    getOrders
++};
+diff --git a/routes/user.js b/routes/user.js
+new file mode 100644
+index 00000000..d052d717
+--- /dev/null
++++ b/routes/user.js
+@@ -0,0 +1,18 @@
++'use strict';
++
++const { getUserFromToken } = require('../plugins/auth-utils');
++
++function getUserProfile(req, res) {
++    const token = req.headers && req.headers.authorization;
++    const user = getUserFromToken(token);
++    
++    if (!user) {
++        return res.status(401).json({ error: 'Unauthorized' });
++    }
++    
++    return res.status(200).json({ profile: user });
++}
++
++module.exports = {
++    getUserProfile
++};
+diff --git a/test/my-routes.test.js b/test/my-routes.test.js
+new file mode 100644
+index 00000000..19618bbe
+--- /dev/null
++++ b/test/my-routes.test.js
+@@ -0,0 +1,53 @@
++'use strict';
++
++const assert = require('assert');
++const { getUserProfile } = require('../routes/user');
++const { getOrders } = require('../routes/order');
++
++function createMockRes() {
++    const res = {
++        statusCode: null,
++        data: null,
++        status(code) {
++            this.statusCode = code;
++            return this;
++        },
++        json(data) {
++            this.data = data;
++            return this;
++        }
++    };
++    return res;
++}
++
++function runTests() {
++    console.log('Running tests...');
++    
++    // Test user.js
++    let req = { headers: { authorization: 'valid-token-user1' } };
++    let res = createMockRes();
++    getUserProfile(req, res);
++    assert.strictEqual(res.statusCode, 200);
++    assert.deepStrictEqual(res.data.profile.username, 'user1');
++
++    req = { headers: {} };
++    res = createMockRes();
++    getUserProfile(req, res);
++    assert.strictEqual(res.statusCode, 401);
++    
++    // Test order.js
++    req = { headers: { authorization: 'valid-token-admin' } };
++    res = createMockRes();
++    getOrders(req, res);
++    assert.strictEqual(res.statusCode, 200);
++    assert.strictEqual(res.data.orders[0].id, 101);
++
++    req = { headers: { authorization: 'invalid' } };
++    res = createMockRes();
++    getOrders(req, res);
++    assert.strictEqual(res.statusCode, 401);
++
++    console.log('All unit tests passed.');
++}
++
++runTests();
