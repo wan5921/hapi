@@ -1,0 +1,286 @@
+diff --git a/3.5.1.patch b/3.5.1.patch
+new file mode 100644
+index 00000000..e69de29b
+diff --git a/EXAMPLE_README.md b/EXAMPLE_README.md
+new file mode 100644
+index 00000000..200899c0
+--- /dev/null
++++ b/EXAMPLE_README.md
+@@ -0,0 +1,135 @@
++# Hapi 用户路由集成示例
++
++## 文件说明
++
++我为你创建了以下示例文件：
++
++1. **example-package.json** - 项目依赖配置
++2. **example-server.js** - 服务器主文件
++3. **example-routes-user.js** - 用户路由（核心实现）
++4. **example-models-db.js** - 模拟数据库
++
++## 核心实现详解
++
++### 1. 用户路由实现 (example-routes-user.js)
++
++```javascript
++{
++    method: 'GET',
++    path: '/user',
++    handler: async (request, h) => {
++        // 从 auth.credentials 获取用户 ID
++        const userId = request.auth.credentials.userId;
++        
++        // 查询数据库
++        const user = await db.getUserById(userId);
++        
++        // 用户不存在返回 404
++        if (!user) {
++            throw Boom.notFound('User not found');
++        }
++        
++        // 返回用户信息
++        return {
++            email: user.email,
++            username: user.username,
++            createdAt: user.createdAt
++        };
++    },
++    options: {
++        auth: 'jwt',
++        description: 'Get current user information',
++        tags: ['api', 'user']
++    }
++}
++```
++
++### 2. JWT 认证配置 (example-server.js)
++
++```javascript
++server.auth.strategy('jwt', 'jwt', {
++    key: 'your-secret-key',
++    validate: async (decoded) => {
++        const user = await db.getUserById(decoded.userId);
++        if (user) {
++            // 挂载 userId 到 credentials
++            return { isValid: true, credentials: { userId: decoded.userId } };
++        }
++        return { isValid: false };
++    },
++    verifyOptions: { algorithms: ['HS256'] }
++});
++```
++
++### 3. 路由注册方式
++
++在 `example-server.js` 中，通过以下方式集成路由：
++
++```javascript
++const userRoutes = require('./example-routes-user');
++server.route(userRoutes);
++```
++
++## 集成到现有项目的步骤
++
++### 步骤 1：安装依赖
++
++```bash
++npm install @hapi/hapi @hapi/boom hapi-auth-jwt2
++```
++
++### 步骤 2：创建路由文件
++
++将 `example-routes-user.js` 复制到你的项目的 `routes/user.js`
++
++### 步骤 3：配置 JWT 认证策略
++
++在你的服务器初始化代码中，注册 JWT 策略并确保 `validate` 函数将用户 ID 挂载到 `credentials` 对象。
++
++### 步骤 4：注册路由
++
++```javascript
++const userRoutes = require('./routes/user');
++server.route(userRoutes);
++```
++
++### 步骤 5：替换数据库模块
++
++在实际项目中，将 `example-models-db.js` 替换为你项目真实的数据库查询模块。
++
++## 测试
++
++### 生成测试用 JWT Token
++
++你可以使用以下代码生成 JWT Token：
++
++```javascript
++const jwt = require('jsonwebtoken');
++const token = jwt.sign({ userId: '1' }, 'your-secret-key', { algorithm: 'HS256' });
++```
++
++### 使用 Token 请求 API
++
++```bash
++curl -H "Authorization: Bearer <token>" http://localhost:3000/user
++```
++
++## 响应示例
++
++成功响应 (200):
++```json
++{
++  "email": "user1@example.com",
++  "username": "user1",
++  "createdAt": "2024-01-01T00:00:00.000Z"
++}
++```
++
++用户不存在响应 (404):
++```json
++{
++  "statusCode": 404,
++  "error": "Not Found",
++  "message": "User not found"
++}
++```
+diff --git a/example-models-db.js b/example-models-db.js
+new file mode 100644
+index 00000000..045292f9
+--- /dev/null
++++ b/example-models-db.js
+@@ -0,0 +1,31 @@
++'use strict';
++
++const users = {
++    '1': {
++        id: '1',
++        email: 'user1@example.com',
++        username: 'user1',
++        password: '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy',
++        createdAt: new Date('2024-01-01T00:00:00Z')
++    },
++    '2': {
++        id: '2',
++        email: 'user2@example.com',
++        username: 'user2',
++        password: '$2b$10$N9qo8uLOickgx2ZMRZoMyeIjZAgcfl7p92ldGxad68LJZdL17lhWy',
++        createdAt: new Date('2024-02-01T00:00:00Z')
++    }
++};
++
++const getUserById = async (userId) => {
++    return users[userId] || null;
++};
++
++const getUserByEmail = async (email) => {
++    return Object.values(users).find(user => user.email === email) || null;
++};
++
++module.exports = {
++    getUserById,
++    getUserByEmail
++};
+diff --git a/example-package.json b/example-package.json
+new file mode 100644
+index 00000000..b279b7ba
+--- /dev/null
++++ b/example-package.json
+@@ -0,0 +1,16 @@
++{
++  "name": "hapi-user-example",
++  "version": "1.0.0",
++  "description": "Hapi API with user routes and JWT authentication",
++  "main": "server.js",
++  "scripts": {
++    "start": "node server.js"
++  },
++  "dependencies": {
++    "@hapi/hapi": "^21.4.9",
++    "@hapi/boom": "^10.0.1",
++    "hapi-auth-jwt2": "^10.6.0"
++  },
++  "author": "",
++  "license": "ISC"
++}
+diff --git a/example-routes-user.js b/example-routes-user.js
+new file mode 100644
+index 00000000..d28e04f7
+--- /dev/null
++++ b/example-routes-user.js
+@@ -0,0 +1,30 @@
++'use strict';
++
++const Boom = require('@hapi/boom');
++const db = require('./example-models-db');
++
++module.exports = [
++    {
++        method: 'GET',
++        path: '/user',
++        handler: async (request, h) => {
++            const userId = request.auth.credentials.userId;
++            const user = await db.getUserById(userId);
++
++            if (!user) {
++                throw Boom.notFound('User not found');
++            }
++
++            return {
++                email: user.email,
++                username: user.username,
++                createdAt: user.createdAt
++            };
++        },
++        options: {
++            auth: 'jwt',
++            description: 'Get current user information',
++            tags: ['api', 'user']
++        }
++    }
++];
+diff --git a/example-server.js b/example-server.js
+new file mode 100644
+index 00000000..d2bf99de
+--- /dev/null
++++ b/example-server.js
+@@ -0,0 +1,41 @@
++'use strict';
++
++const Hapi = require('@hapi/hapi');
++const HapiAuthJwt2 = require('hapi-auth-jwt2');
++const userRoutes = require('./example-routes-user');
++const db = require('./example-models-db');
++
++const init = async () => {
++    const server = Hapi.server({
++        port: 3000,
++        host: 'localhost'
++    });
++
++    await server.register(HapiAuthJwt2);
++
++    server.auth.strategy('jwt', 'jwt', {
++        key: 'your-secret-key',
++        validate: async (decoded) => {
++            const user = await db.getUserById(decoded.userId);
++            if (user) {
++                return { isValid: true, credentials: { userId: decoded.userId } };
++            }
++            return { isValid: false };
++        },
++        verifyOptions: { algorithms: ['HS256'] }
++    });
++
++    server.auth.default('jwt');
++
++    server.route(userRoutes);
++
++    await server.start();
++    console.log('Server running on %s', server.info.uri);
++};
++
++process.on('unhandledRejection', (err) => {
++    console.log(err);
++    process.exit(1);
++});
++
++init();
