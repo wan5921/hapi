@@ -1,0 +1,338 @@
+diff --git a/3.2.1.patch b/3.2.1.patch
+deleted file mode 100644
+index 4c760774..00000000
+--- a/3.2.1.patch
++++ /dev/null
+@@ -1,12 +0,0 @@
+-diff --git a/package.json b/package.json
+-index d27533e6..6903a953 100755
+---- a/package.json
+-+++ b/package.json
+-@@ -52,6 +52,7 @@
+-     "@hapi/vision": "^7.0.3",
+-     "@hapi/wreck": "^18.1.0",
+-     "@types/node": "^18.19.130",
+-+    "bcrypt": "^5.1.1",
+-     "handlebars": "^4.7.9",
+-     "joi": "^17.13.3",
+-     "legacy-readable-stream": "npm:readable-stream@^1.0.34",
+diff --git a/server.js b/example-server.js
+similarity index 69%
+rename from server.js
+rename to example-server.js
+index 332e3d79..42ece83f 100644
+--- a/server.js
++++ b/example-server.js
+@@ -1,7 +1,7 @@
+ 'use strict';
+ 
+-const Hapi = require('./lib');
+-const { registerRoute } = require('./routes/user');
++const Hapi = require('.');
++const { routes } = require('./routes/user');
+ 
+ const init = async () => {
+ 
+@@ -10,18 +10,16 @@ const init = async () => {
+         host: 'localhost'
+     });
+ 
+-    server.route(registerRoute);
++    // 注册用户路由
++    server.route(routes);
+ 
+     await server.start();
+     console.log('Server running on %s', server.info.uri);
+ };
+ 
+ process.on('unhandledRejection', (err) => {
+-
+     console.log(err);
+     process.exit(1);
+ });
+ 
+ init();
+-
+-module.exports = init;
+diff --git a/package.json b/package.json
+index 6903a953..f8460146 100755
+--- a/package.json
++++ b/package.json
+@@ -41,7 +41,9 @@
+     "@hapi/subtext": "^8.1.3",
+     "@hapi/teamwork": "^6.0.1",
+     "@hapi/topo": "^6.0.2",
+-    "@hapi/validate": "^2.0.1"
++    "@hapi/validate": "^2.0.1",
++    "bcrypt": "^5.1.1",
++    "joi": "^17.13.3"
+   },
+   "devDependencies": {
+     "@hapi/code": "^9.0.3",
+@@ -52,7 +54,6 @@
+     "@hapi/vision": "^7.0.3",
+     "@hapi/wreck": "^18.1.0",
+     "@types/node": "^18.19.130",
+-    "bcrypt": "^5.1.1",
+     "handlebars": "^4.7.9",
+     "joi": "^17.13.3",
+     "legacy-readable-stream": "npm:readable-stream@^1.0.34",
+diff --git a/routes/user.js b/routes/user.js
+index 969d33b6..37b60de4 100644
+--- a/routes/user.js
++++ b/routes/user.js
+@@ -1,50 +1,73 @@
+ 'use strict';
+ 
+ const Joi = require('joi');
+-const Bcrypt = require('bcrypt');
++const bcrypt = require('bcrypt');
+ 
+-const users = [];
++// 模拟用户数据库
++const users = new Map();
+ 
+-const registerRoute = {
+-    method: 'POST',
+-    path: '/api/register',
+-    options: {
+-        validate: {
+-            payload: Joi.object({
+-                username: Joi.string().min(3).required().label('Username'),
+-                email: Joi.string().email().required().label('Email'),
+-                password: Joi.string().min(6).required().label('Password')
+-            })
+-        }
+-    },
+-    handler: async (request, h) => {
++// 注册用户的路由处理函数
++const registerUser = async (request, h) => {
++    const { username, email, password } = request.payload;
+ 
+-        const { username, email, password } = request.payload;
+-
+-        const existingUser = users.find(u => u.email === email || u.username === username);
+-        if (existingUser) {
+-            return h.response({ error: 'User already exists' }).code(409);
+-        }
++    // 检查用户是否已存在
++    if (users.has(email)) {
++        return h.response({ message: 'Email already registered' }).code(409);
++    }
+ 
+-        const saltRounds = 10;
+-        const hashedPassword = await Bcrypt.hash(password, saltRounds);
++    // 加密密码
++    const saltRounds = 10;
++    const hashedPassword = await bcrypt.hash(password, saltRounds);
+ 
+-        const newUser = {
+-            id: users.length + 1,
+-            username,
+-            email,
+-            password: hashedPassword
+-        };
++    // 创建新用户对象（不包含密码）
++    const newUser = {
++        id: Date.now(),
++        username,
++        email,
++        createdAt: new Date().toISOString()
++    };
+ 
+-        users.push(newUser);
++    // 保存到数据库（同时保存密码）
++    users.set(email, { ...newUser, password: hashedPassword });
+ 
+-        const { password: _, ...userWithoutPassword } = newUser;
++    // 返回用户信息（不包含密码）
++    return h.response(newUser).code(201);
++};
+ 
+-        return h.response(userWithoutPassword).code(201);
++// 定义注册路由
++const registerRoute = {
++    method: 'POST',
++    path: '/api/register',
++    options: {
++        validate: {
++            payload: Joi.object({
++                username: Joi.string().min(3).required().messages({
++                    'string.min': 'Username must be at least 3 characters long',
++                    'any.required': 'Username is required'
++                }),
++                email: Joi.string().email().required().messages({
++                    'string.email': 'Email must be a valid email address',
++                    'any.required': 'Email is required'
++                }),
++                password: Joi.string().min(6).required().messages({
++                    'string.min': 'Password must be at least 6 characters long',
++                    'any.required': 'Password is required'
++                })
++            }),
++            failAction: (request, h, error) => {
++                const errorDetails = error.details.map(detail => ({
++                    field: detail.context.key,
++                    message: detail.message
++                }));
++                return h.response({ errors: errorDetails }).code(400).takeover();
++            }
++        },
++        handler: registerUser,
++        tags: ['api', 'user']
+     }
+ };
+ 
+ module.exports = {
+     registerRoute,
+-    users
++    routes: [registerRoute]
+ };
+diff --git a/test/user.js b/test/user.js
+index 7bd153d0..0bf10fdb 100644
+--- a/test/user.js
++++ b/test/user.js
+@@ -1,25 +1,19 @@
+ 'use strict';
+ 
+ const Code = require('@hapi/code');
+-const Hapi = require('../lib');
++const Hapi = require('..');
+ const Lab = require('@hapi/lab');
+-const { registerRoute, users } = require('../routes/user');
++const { registerRoute } = require('../routes/user');
+ 
+-const { describe, it, beforeEach } = exports.lab = Lab.script();
++const { describe, it } = exports.lab = Lab.script();
+ const expect = Code.expect;
+ 
+-describe('User Registration', () => {
++describe('User Registration API', () => {
+ 
+-    let server;
++    it('should register a user successfully with valid data', async () => {
+ 
+-    beforeEach(async () => {
+-
+-        users.length = 0;
+-        server = Hapi.server();
++        const server = Hapi.server();
+         server.route(registerRoute);
+-    });
+-
+-    it('should register a new user successfully', async () => {
+ 
+         const res = await server.inject({
+             method: 'POST',
+@@ -35,11 +29,14 @@ describe('User Registration', () => {
+         expect(res.result).to.be.an.object();
+         expect(res.result.username).to.equal('testuser');
+         expect(res.result.email).to.equal('test@example.com');
+-        expect(res.result.password).to.not.exist();
+         expect(res.result.id).to.exist();
++        expect(res.result.password).to.not.exist();
+     });
+ 
+-    it('should return 400 for invalid email', async () => {
++    it('should return 400 when email is invalid', async () => {
++
++        const server = Hapi.server();
++        server.route(registerRoute);
+ 
+         const res = await server.inject({
+             method: 'POST',
+@@ -52,9 +49,14 @@ describe('User Registration', () => {
+         });
+ 
+         expect(res.statusCode).to.equal(400);
++        expect(res.result.errors).to.be.an.array();
++        expect(res.result.errors.some(err => err.field === 'email')).to.be.true();
+     });
+ 
+-    it('should return 400 for too short username', async () => {
++    it('should return 400 when username is too short', async () => {
++
++        const server = Hapi.server();
++        server.route(registerRoute);
+ 
+         const res = await server.inject({
+             method: 'POST',
+@@ -67,9 +69,14 @@ describe('User Registration', () => {
+         });
+ 
+         expect(res.statusCode).to.equal(400);
++        expect(res.result.errors).to.be.an.array();
++        expect(res.result.errors.some(err => err.field === 'username')).to.be.true();
+     });
+ 
+-    it('should return 400 for too short password', async () => {
++    it('should return 400 when password is too short', async () => {
++
++        const server = Hapi.server();
++        server.route(registerRoute);
+ 
+         const res = await server.inject({
+             method: 'POST',
+@@ -82,43 +89,54 @@ describe('User Registration', () => {
+         });
+ 
+         expect(res.statusCode).to.equal(400);
++        expect(res.result.errors).to.be.an.array();
++        expect(res.result.errors.some(err => err.field === 'password')).to.be.true();
+     });
+ 
+-    it('should return 400 for missing required fields', async () => {
++    it('should return 400 when required fields are missing', async () => {
++
++        const server = Hapi.server();
++        server.route(registerRoute);
+ 
+         const res = await server.inject({
+             method: 'POST',
+             url: '/api/register',
+-            payload: {
+-                username: 'testuser'
+-            }
++            payload: {}
+         });
+ 
+         expect(res.statusCode).to.equal(400);
++        expect(res.result.errors).to.be.an.array();
++        expect(res.result.errors.length).to.be.at.least(3);
+     });
+ 
+-    it('should return 409 for duplicate email or username', async () => {
++    it('should return 409 when email is already registered', async () => {
+ 
++        const server = Hapi.server();
++        server.route(registerRoute);
++
++        // 第一次注册
+         await server.inject({
+             method: 'POST',
+             url: '/api/register',
+             payload: {
+                 username: 'testuser',
+-                email: 'test@example.com',
++                email: 'duplicate@example.com',
+                 password: 'password123'
+             }
+         });
+ 
++        // 尝试用相同邮箱再次注册
+         const res = await server.inject({
+             method: 'POST',
+             url: '/api/register',
+             payload: {
+-                username: 'testuser',
+-                email: 'another@example.com',
++                username: 'anotheruser',
++                email: 'duplicate@example.com',
+                 password: 'password123'
+             }
+         });
+ 
+         expect(res.statusCode).to.equal(409);
++        expect(res.result.message).to.equal('Email already registered');
+     });
+ });
