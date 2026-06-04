@@ -1,0 +1,94 @@
+diff --git a/.dockerignore b/.dockerignore
+new file mode 100644
+index 00000000..637e2fa2
+--- /dev/null
++++ b/.dockerignore
+@@ -0,0 +1,4 @@
++node_modules
++.git
++logs
++coverage
+diff --git a/.github/workflows/ci.yml b/.github/workflows/ci.yml
+new file mode 100644
+index 00000000..84b13de0
+--- /dev/null
++++ b/.github/workflows/ci.yml
+@@ -0,0 +1,54 @@
++name: CI/CD Pipeline
++
++on:
++  push:
++    branches:
++      - main
++  pull_request:
++    branches:
++      - main
++
++jobs:
++  build-and-test:
++    runs-on: ubuntu-latest
++
++    steps:
++      - name: Checkout code
++        uses: actions/checkout@v3
++
++      - name: Setup Node.js
++        uses: actions/setup-node@v3
++        with:
++          node-version: '18'
++          cache: 'npm'
++
++      - name: Install dependencies
++        run: npm ci
++
++      - name: Run tests
++        run: npm test
++
++  docker-build-push:
++    needs: build-and-test
++    runs-on: ubuntu-latest
++    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
++
++    steps:
++      - name: Checkout code
++        uses: actions/checkout@v3
++
++      - name: Set up Docker Buildx
++        uses: docker/setup-buildx-action@v2
++
++      - name: Login to Docker Hub
++        uses: docker/login-action@v2
++        with:
++          username: ${{ secrets.DOCKER_USERNAME }}
++          password: ${{ secrets.DOCKER_TOKEN }}
++
++      - name: Build and push Docker image
++        uses: docker/build-push-action@v4
++        with:
++          context: .
++          push: true
++          tags: ${{ secrets.DOCKER_USERNAME }}/hapi-app:latest
+diff --git a/Dockerfile b/Dockerfile
+new file mode 100644
+index 00000000..b4f72700
+--- /dev/null
++++ b/Dockerfile
+@@ -0,0 +1,18 @@
++FROM node:18-alpine
++
++WORKDIR /app
++
++# 复制 package.json 和 package-lock.json
++COPY package*.json ./
++
++# 运行 npm ci --only=production
++RUN npm ci --only=production
++
++# 复制源码
++COPY . .
++
++# 暴露端口 3000
++EXPOSE 3000
++
++# 运行应用
++CMD ["node", "server.js"]
