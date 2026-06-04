@@ -1,0 +1,16 @@
+{
+  "name": "hapi-user-example",
+  "version": "1.0.0",
+  "description": "Hapi API with user routes and JWT authentication",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@hapi/hapi": "^21.4.9",
+    "@hapi/boom": "^10.0.1",
+    "hapi-auth-jwt2": "^10.6.0"
+  },
+  "author": "",
+  "license": "ISC"
+}
