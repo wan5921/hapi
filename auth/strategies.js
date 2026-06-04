@@ -29,20 +29,20 @@ module.exports = {
           token = match[1];
           console.log('JWT Authentication - Extracted token:', token);
           
-          let decoded;
-          try {
-            decoded = JWT.verify(token, options.secretKey);
-            isValid = true;
-            console.log('JWT Authentication - Token successfully decoded, isValid:', isValid);
-          } catch (jwtErr) {
-            console.log('JWT Authentication - Token verification failed, isValid:', isValid, 'Error:', jwtErr.message);
+          const validationResult = await validate(token, options.secretKey);
+          
+          console.log('JWT Authentication - Token validation result:', validationResult);
+          
+          isValid = validationResult.isValid;
+          
+          if (!isValid) {
             throw Boom.unauthorized('Invalid token', 'Bearer');
           }
           
           const credentials = {
-            user: decoded.sub,
-            scope: decoded.scope || [],
-            ...decoded
+            user: validationResult.decoded.sub,
+            scope: validationResult.decoded.scope || [],
+            ...validationResult.decoded
           };
           
           console.log('JWT Authentication - Authentication successful, isValid:', isValid, 'Credentials:', credentials);
@@ -62,5 +62,21 @@ module.exports = {
     };
     
     return scheme;
+  }
+};
+
+const validate = async (token, secretKey) => {
+  console.log('JWT validate - Entering validate function, token:', token);
+  
+  try {
+    const decoded = JWT.verify(token, secretKey);
+    const result = { isValid: true, decoded };
+    console.log('JWT validate - Token valid, result:', result);
+    return result;
+  } catch (error) {
+    console.error('JWT validate - Token invalid, error:', error.message);
+    const result = { isValid: false };
+    console.log('JWT validate - Returning validation result:', result);
+    return result;
   }
 };
