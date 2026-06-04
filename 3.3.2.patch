@@ -1,0 +1,77 @@
+strategies.js
+
+const validate = async (artifacts, request, h) => {
+  const authorization = request.headers.authorization;
+  const isBearerFormat = typeof authorization === 'string' && /^Bearer [^\s]+$/.test(authorization);
+  const token = isBearerFormat ? authorization.slice(7) : null;
+
+  console.log('[jwt.validate] token:', token);
+
+  if (!token) {
+    const result = { isValid: false };
+    console.log('[jwt.validate] result:', result);
+    return result;
+  }
+
+  try {
+    const credentials = await UserService.verifyToken(token);
+
+    const result = credentials
+      ? { isValid: true, credentials }
+      : { isValid: false };
+
+    console.log('[jwt.validate] result:', result);
+    return result;
+  }
+  catch (err) {
+    const result = { isValid: false };
+    console.log('[jwt.validate] result:', result);
+    return result;
+  }
+};
+
+module.exports = {
+  name: 'jwt',
+  scheme: 'jwt',
+  options: {
+    keys: process.env.JWT_SECRET,
+    verify: {
+      aud: false,
+      iss: false,
+      sub: false,
+      nbf: true,
+      exp: true,
+      maxAgeSec: 14400,
+      timeSkewSec: 15
+    },
+    validate
+  }
+};
+
+protected-route.js
+
+server.route({
+  method: 'GET',
+  path: '/profile',
+  options: {
+    auth: 'jwt',
+    handler: async (request, h) => {
+      return request.auth.credentials;
+    }
+  }
+});
+
+调试步骤
+
+1. 启动服务后，先用合法 Bearer Token 请求受保护路由。
+2. 观察服务端日志是否打印：
+   - [jwt.validate] token: <token>
+   - [jwt.validate] result: { isValid: true, credentials: ... }
+3. 用以下非法请求分别验证严格格式校验：
+   - Authorization: bearer <token>
+   - Authorization: Bearer    <token>
+   - Authorization: Bearer
+   - Authorization: Token <token>
+4. 确认以上非法请求都会返回未认证，并打印：
+   - [jwt.validate] result: { isValid: false }
+5. 检查所有受保护路由都显式配置为 auth: 'jwt'。
