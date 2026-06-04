@@ -1,0 +1,71 @@
+'use strict';
+
+const Jwt = require('jsonwebtoken');
+const Boom = require('@hapi/boom');
+
+const JWT_SECRET = process.env.JWT_SECRET || 'your-secret-key';
+
+const validate = async (decoded, request, h) => {
+  try {
+    const authHeader = request.headers.authorization;
+    console.log('[JWT Debug] Authorization Header:', authHeader);
+
+    if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      console.log('[JWT Debug] Invalid format - missing Bearer prefix');
+      return { isValid: false };
+    }
+
+    const token = authHeader.slice(7);
+    console.log('[JWT Debug] Extracted Token:', token);
+
+    if (!token) {
+      console.log('[JWT Debug] Empty token');
+      return { isValid: false };
+    }
+
+    const decoded_token = Jwt.verify(token, JWT_SECRET);
+    console.log('[JWT Debug] Decoded Token:', decoded_token);
+
+    const user = { id: decoded_token.id, email: decoded_token.email };
+    console.log('[JWT Debug] Validation Result: SUCCESS', { isValid: true, credentials: user });
+
+    return { isValid: true, credentials: user };
+  } catch (err) {
+    console.log('[JWT Debug] Validation Error:', err.message);
+    return { isValid: false };
+  }
+};
+
+const jwtStrategy = (server, options) => {
+  return {
+    authenticate: async (request, h) => {
+      const authHeader = request.headers.authorization;
+
+      if (!authHeader || !/^Bearer\s+\S+$/.test(authHeader)) {
+        console.log('[JWT Debug] Authentication failed - invalid Authorization header format');
+        return h.unauthenticated(Boom.unauthorized('Invalid authorization header format'));
+      }
+
+      const token = authHeader.slice(7);
+
+      try {
+        const decoded = Jwt.verify(token, JWT_SECRET);
+        const result = await validate(decoded, request, h);
+
+        if (!result.isValid) {
+          return h.unauthenticated(Boom.unauthorized('Invalid token'));
+        }
+
+        return h.authenticated({
+          credentials: result.credentials,
+          artifacts: { token }
+        });
+      } catch (err) {
+        console.log('[JWT Debug] Authentication error:', err.message);
+        return h.unauthenticated(Boom.unauthorized('Token verification failed'));
+      }
+    }
+  };
+};
+
+module.exports = { jwtStrategy, validate };
