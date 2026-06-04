@@ -55,6 +55,7 @@
     "handlebars": "^4.7.9",
     "joi": "^17.13.3",
     "legacy-readable-stream": "npm:readable-stream@^1.0.34",
+    "sinon": "^17.0.1",
     "typescript": "^5.9.3"
   },
   "scripts": {
