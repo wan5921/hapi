@@ -1,3 +1,21 @@
+diff --git a/3.2.5.patch b/3.2.5.patch
+new file mode 100644
+index 00000000..390450c8
+--- /dev/null
++++ b/3.2.5.patch
+@@ -0,0 +1,12 @@
++diff --git a/package.json b/package.json
++index d27533e6..96acc0e1 100755
++--- a/package.json
+++++ b/package.json
++@@ -54,6 +54,7 @@
++     "@types/node": "^18.19.130",
++     "handlebars": "^4.7.9",
++     "joi": "^17.13.3",
+++    "bcryptjs": "^2.4.3",
++     "legacy-readable-stream": "npm:readable-stream@^1.0.34",
++     "typescript": "^5.9.3"
++   },
 diff --git a/package.json b/package.json
 index d27533e6..96acc0e1 100755
 --- a/package.json
@@ -10,3 +28,222 @@ index d27533e6..96acc0e1 100755
      "legacy-readable-stream": "npm:readable-stream@^1.0.34",
      "typescript": "^5.9.3"
    },
+diff --git a/routes/user.js b/routes/user.js
+new file mode 100644
+index 00000000..9b95ed01
+--- /dev/null
++++ b/routes/user.js
+@@ -0,0 +1,61 @@
++'use strict';
++
++const Bcrypt = require('bcryptjs');
++const Joi = require('joi');
++
++
++const internals = {
++    users: []
++};
++
++
++internals.schema = Joi.object({
++    username: Joi.string().min(3).required(),
++    email: Joi.string().email().required(),
++    password: Joi.string().min(6).required()
++});
++
++
++module.exports = {
++    name: 'user-routes',
++    register: function (server, options) {
++
++        server.validator(Joi);
++
++        server.route({
++            method: 'POST',
++            path: '/api/register',
++            handler: async (request, h) => {
++
++                const { username, email, password } = request.payload;
++
++                const salt = await Bcrypt.genSalt(10);
++                const hashedPassword = await Bcrypt.hash(password, salt);
++
++                const user = {
++                    id: internals.users.length + 1,
++                    username,
++                    email,
++                    password: hashedPassword
++                };
++
++                internals.users.push(user);
++
++                return h.response({
++                    id: user.id,
++                    username: user.username,
++                    email: user.email
++                }).code(201);
++            },
++            options: {
++                validate: {
++                    payload: internals.schema,
++                    failAction: (request, h, err) => {
++
++                        throw err;
++                    }
++                }
++            }
++        });
++    }
++};
+diff --git a/test/register.js b/test/register.js
+new file mode 100644
+index 00000000..36a3e4d2
+--- /dev/null
++++ b/test/register.js
+@@ -0,0 +1,146 @@
++'use strict';
++
++const Code = require('@hapi/code');
++const Hapi = require('..');
++const Lab = require('@hapi/lab');
++const UserRoutes = require('../routes/user');
++
++
++const internals = {};
++
++
++const { describe, it } = exports.lab = Lab.script();
++const expect = Code.expect;
++
++
++describe('Register', () => {
++
++    const provision = async () => {
++
++        const server = Hapi.server();
++        await server.register(UserRoutes);
++        return server;
++    };
++
++    it('registers a new user successfully', async () => {
++
++        const server = await provision();
++
++        const res = await server.inject({
++            method: 'POST',
++            url: '/api/register',
++            payload: {
++                username: 'testuser',
++                email: 'test@example.com',
++                password: '123456'
++            }
++        });
++
++        expect(res.statusCode).to.equal(201);
++        expect(res.result).to.include({
++            username: 'testuser',
++            email: 'test@example.com'
++        });
++        expect(res.result).to.not.include('password');
++        expect(res.result.id).to.exist();
++    });
++
++    it('returns 400 when email is invalid', async () => {
++
++        const server = await provision();
++
++        const res = await server.inject({
++            method: 'POST',
++            url: '/api/register',
++            payload: {
++                username: 'testuser',
++                email: 'invalid-email',
++                password: '123456'
++            }
++        });
++
++        expect(res.statusCode).to.equal(400);
++    });
++
++    it('returns 400 when username is too short', async () => {
++
++        const server = await provision();
++
++        const res = await server.inject({
++            method: 'POST',
++            url: '/api/register',
++            payload: {
++                username: 'ab',
++                email: 'test@example.com',
++                password: '123456'
++            }
++        });
++
++        expect(res.statusCode).to.equal(400);
++    });
++
++    it('returns 400 when password is too short', async () => {
++
++        const server = await provision();
++
++        const res = await server.inject({
++            method: 'POST',
++            url: '/api/register',
++            payload: {
++                username: 'testuser',
++                email: 'test@example.com',
++                password: '12345'
++            }
++        });
++
++        expect(res.statusCode).to.equal(400);
++    });
++
++    it('returns 400 when username is missing', async () => {
++
++        const server = await provision();
++
++        const res = await server.inject({
++            method: 'POST',
++            url: '/api/register',
++            payload: {
++                email: 'test@example.com',
++                password: '123456'
++            }
++        });
++
++        expect(res.statusCode).to.equal(400);
++    });
++
++    it('returns 400 when email is missing', async () => {
++
++        const server = await provision();
++
++        const res = await server.inject({
++            method: 'POST',
++            url: '/api/register',
++            payload: {
++                username: 'testuser',
++                password: '123456'
++            }
++        });
++
++        expect(res.statusCode).to.equal(400);
++    });
++
++    it('returns 400 when password is missing', async () => {
++
++        const server = await provision();
++
++        const res = await server.inject({
++            method: 'POST',
++            url: '/api/register',
++            payload: {
++                username: 'testuser',
++                email: 'test@example.com'
++            }
++        });
++
++        expect(res.statusCode).to.equal(400);
++    });
++});
