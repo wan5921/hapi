@@ -1,0 +1,40 @@
+// strategies.js
+
+const validate = async (decoded, request, h) => {
+  const authHeader = request.headers.authorization;
+
+  // 4. 在 validate 入口添加 console.log 输出 token
+  console.log('--- JWT Validation ---');
+  console.log('Authorization Header:', authHeader);
+
+  try {
+    // 2. 验证 request.headers.authorization 严格匹配 Bearer <token> 格式（注意大小写与空格）
+    // 必须精确以 "Bearer " 开头，且后接有效 token 字符串
+    if (!authHeader || !/^Bearer \S+$/.test(authHeader)) {
+      const result = { isValid: false };
+      console.log('Validation Result:', result, '(Reason: Invalid Bearer token format)');
+      return result;
+    }
+
+    // 在此处可继续添加你原本的异步校验逻辑，如查询数据库验证用户状态
+    // const user = await db.users.findById(decoded.id);
+    // if (!user) {
+    //   const result = { isValid: false };
+    //   console.log('Validation Result:', result, '(Reason: User not found)');
+    //   return result;
+    // }
+
+    const result = { isValid: true };
+    console.log('Validation Result:', result);
+    return result;
+
+  } catch (error) {
+    // 1. 捕获异步错误，失败时返回 { isValid: false }
+    console.error('Validation Async Error:', error);
+    return { isValid: false };
+  }
+};
+
+module.exports = {
+  validate
+};
