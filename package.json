@@ -42,7 +42,6 @@
     "@hapi/teamwork": "^6.0.1",
     "@hapi/topo": "^6.0.2",
     "@hapi/validate": "^2.0.1"
-  },
   "devDependencies": {
     "@hapi/code": "^9.0.3",
     "@hapi/eslint-plugin": "^6.0.0",
@@ -54,7 +53,6 @@
     "@types/node": "^18.19.130",
     "handlebars": "^4.7.9",
     "joi": "^17.13.3",
-    "legacy-readable-stream": "npm:readable-stream@^1.0.34",
     "typescript": "^5.9.3"
   },
   "scripts": {

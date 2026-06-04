@@ -1,0 +1,13 @@
+{
+  "name": "jwt-auth-example",
+  "version": "1.0.0",
+  "description": "Example Hapi server with JWT authentication",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "dependencies": {
+    "@hapi/hapi": "^21.4.9",
+    "jsonwebtoken": "^9.0.0"
+  }
+}
