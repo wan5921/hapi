@@ -1,0 +1,44 @@
+diff --git a/routes/user.js b/routes/user.js
+new file mode 100644
+index 0000000..8a4e1a3
+--- /dev/null
++++ b/routes/user.js
+@@ -0,0 +1,33 @@
++const Boom = require('@hapi/boom');
++
++// 模拟数据库 (在实际项目中请替换为您自己的 DB 模块)
++const mockDB = {
++    users: [
++        { id: '1', username: 'alice', email: 'alice@example.com', createdAt: '2023-01-01T10:00:00Z' },
++        { id: '2', username: 'bob', email: 'bob@example.com', createdAt: '2023-01-02T10:00:00Z' }
++    ]
++};
++
++// 模拟数据库查询方法
++const findUserById = async (id) => {
++    return mockDB.users.find(user => user.id === id);
++};
++
++module.exports = [
++    {
++        method: 'GET',
++        path: '/user/profile',
++        options: {
++            auth: 'jwt', 
++            handler: async (request, h) => {
++                const userId = request.auth.credentials.id;
++                const user = await findUserById(userId);
++
++                if (!user) {
++                    throw Boom.notFound('用户不存在');
++                }
++
++                return {
++                    email: user.email,
++                    username: user.username,
++                    createdAt: user.createdAt
++                };
++            }
++        }
++    }
++];
