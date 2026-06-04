@@ -54,6 +54,7 @@
     "@types/node": "^18.19.130",
     "handlebars": "^4.7.9",
     "joi": "^17.13.3",
+    "bcryptjs": "^2.4.3",
     "legacy-readable-stream": "npm:readable-stream@^1.0.34",
     "typescript": "^5.9.3"
   },
