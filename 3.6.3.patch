@@ -1,0 +1,157 @@
+diff --git a/routes/user.js b/routes/user.js
+new file mode 100644
+index 00000000..f74074fc
+--- /dev/null
++++ b/routes/user.js
+@@ -0,0 +1,37 @@
++// routes/user.js
++const getUserFromToken = async (token) => {
++    // 模拟真实的数据库调用
++    return null;
++};
++
++const route = {
++    method: 'GET',
++    path: '/api/user/profile',
++    handler: async (request, h) => {
++        const authHeader = request.headers.authorization;
++        if (!authHeader) {
++            return h.response({ message: '未携带 token' }).code(401);
++        }
++
++        const token = authHeader.replace('Bearer ', '');
++        
++        let user;
++        try {
++            // 注意这里通过 module.exports 调用以便 sinon 能够 stub
++            user = await module.exports.getUserFromToken(token);
++        } catch (err) {
++            return h.response({ message: 'token 无效' }).code(401);
++        }
++
++        if (user === null || user === undefined) {
++            return h.response({ message: '用户不存在' }).code(404);
++        }
++
++        return h.response({ user }).code(200);
++    }
++};
++
++module.exports = {
++    route,
++    getUserFromToken
++};
+diff --git a/services/auth.js b/services/auth.js
+new file mode 100644
+index 00000000..50e9eb79
+--- /dev/null
++++ b/services/auth.js
+@@ -0,0 +1,8 @@
++const getUserFromToken = async (token) => {
++    // 真实数据库调用
++    return null;
++};
++
++module.exports = {
++    getUserFromToken
++};
+diff --git a/test/user.js b/test/user.js
+new file mode 100644
+index 00000000..1fdc2159
+--- /dev/null
++++ b/test/user.js
+@@ -0,0 +1,94 @@
++'use strict';
++
++const Lab = require('@hapi/lab');
++const Code = require('@hapi/code');
++const sinon = require('sinon');
++
++// 尝试加载 hapi 模块，如果在 Hapi 源码仓库内则使用 '..'，否则使用 '@hapi/hapi'
++let Hapi;
++try {
++    Hapi = require('@hapi/hapi');
++} catch (err) {
++    Hapi = require('..');
++}
++
++const UserRouteModule = require('../routes/user');
++
++const { afterEach, beforeEach, describe, it } = exports.lab = Lab.script();
++const expect = Code.expect;
++
++describe('GET /api/user/profile', () => {
++    let server;
++
++    beforeEach(async () => {
++        server = Hapi.server();
++        server.route(UserRouteModule.route);
++    });
++
++    afterEach(() => {
++        sinon.restore();
++    });
++
++    it('场景一：未携带 token，返回 401', async () => {
++        const res = await server.inject({
++            method: 'GET',
++            url: '/api/user/profile'
++        });
++
++        expect(res.statusCode).to.equal(401);
++        expect(res.result).to.be.an.object();
++        expect(res.result.message).to.exist();
++        expect(res.result.message).to.equal('未携带 token');
++    });
++
++    it('场景二：token 无效，返回 401', async () => {
++        sinon.stub(UserRouteModule, 'getUserFromToken').rejects(new Error('Invalid token'));
++
++        const res = await server.inject({
++            method: 'GET',
++            url: '/api/user/profile',
++            headers: {
++                authorization: 'Bearer invalid_token'
++            }
++        });
++
++        expect(res.statusCode).to.equal(401);
++        expect(res.result).to.be.an.object();
++        expect(res.result.message).to.exist();
++        expect(res.result.message).to.equal('token 无效');
++    });
++
++    it('场景三：token 有效但用户不存在，返回 404', async () => {
++        sinon.stub(UserRouteModule, 'getUserFromToken').resolves(null);
++
++        const res = await server.inject({
++            method: 'GET',
++            url: '/api/user/profile',
++            headers: {
++                authorization: 'Bearer valid_token_no_user'
++            }
++        });
++
++        expect(res.statusCode).to.equal(404);
++        expect(res.result).to.be.an.object();
++        expect(res.result.message).to.exist();
++        expect(res.result.message).to.equal('用户不存在');
++    });
++
++    it('场景四：token 有效且用户存在，返回 200', async () => {
++        const mockUser = { id: 123, name: 'Test User' };
++        sinon.stub(UserRouteModule, 'getUserFromToken').resolves(mockUser);
++
++        const res = await server.inject({
++            method: 'GET',
++            url: '/api/user/profile',
++            headers: {
++                authorization: 'Bearer valid_token'
++            }
++        });
++
++        expect(res.statusCode).to.equal(200);
++        expect(res.result).to.be.an.object();
++        expect(res.result.user).to.equal(mockUser);
++    });
++});
