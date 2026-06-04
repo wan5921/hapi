@@ -1,0 +1,50 @@
+diff --git a/routes/user.js b/routes/user.js
+new file mode 100644
+index 00000000..825efb45
+--- /dev/null
++++ b/routes/user.js
+@@ -0,0 +1,43 @@
++'use strict';
++
++const Boom = require('@hapi/boom');
++
++
++const internals = {
++    users: new Map([
++        [1, { id: 1, email: 'alice@example.com', username: 'alice', createdAt: new Date('2025-01-15T08:30:00Z') }],
++        [2, { id: 2, email: 'bob@example.com', username: 'bob', createdAt: new Date('2025-03-22T14:00:00Z') }],
++        [3, { id: 3, email: 'charlie@example.com', username: 'charlie', createdAt: new Date('2025-06-10T10:15:00Z') }]
++    ])
++};
++
++
++exports.plugin = {
++    name: 'user-routes',
++    version: '1.0.0',
++    register: function (server, options) {
++
++        server.route({
++            method: 'GET',
++            path: '/user/profile',
++            options: {
++                auth: 'jwt',
++                handler: (request, h) => {
++
++                    const userId = request.auth.credentials.id;
++
++                    const user = internals.users.get(userId);
++                    if (!user) {
++                        throw Boom.notFound('User not found');
++                    }
++
++                    return h.response({
++                        email: user.email,
++                        username: user.username,
++                        createdAt: user.createdAt
++                    });
++                }
++            }
++        });
++    }
++};
+\ No newline at end of file
