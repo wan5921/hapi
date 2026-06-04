@@ -1,3 +1,22 @@
+diff --git a/3.2.2.patch b/3.2.2.patch
+new file mode 100644
+index 00000000..9a9283ad
+--- /dev/null
++++ b/3.2.2.patch
+@@ -0,0 +1,13 @@
++diff --git a/package.json b/package.json
++index d27533e6..713ff22b 100755
++--- a/package.json
+++++ b/package.json
++@@ -42,8 +42,6 @@
++     "@hapi/teamwork": "^6.0.1",
++     "@hapi/topo": "^6.0.2",
++     "@hapi/validate": "^2.0.1"
++-  },
++-  "devDependencies": {
++     "@hapi/code": "^9.0.3",
++     "@hapi/eslint-plugin": "^6.0.0",
++     "@hapi/inert": "^7.1.0",
 diff --git a/package.json b/package.json
 index d27533e6..713ff22b 100755
 --- a/package.json
@@ -11,3 +30,211 @@ index d27533e6..713ff22b 100755
      "@hapi/code": "^9.0.3",
      "@hapi/eslint-plugin": "^6.0.0",
      "@hapi/inert": "^7.1.0",
+diff --git a/routes/user.js b/routes/user.js
+new file mode 100644
+index 00000000..f488cb2e
+--- /dev/null
++++ b/routes/user.js
+@@ -0,0 +1,104 @@
++'use strict';
++
++const Crypto = require('crypto');
++
++let Joi;
++
++try {
++    Joi = require('@hapi/joi');
++}
++catch (err) {
++    Joi = require('joi');
++}
++
++let Bcrypt;
++
++try {
++    Bcrypt = require('bcrypt');
++}
++catch (err) {
++    try {
++        Bcrypt = require('bcryptjs');
++    }
++    catch (innerErr) {
++        Bcrypt = null;
++    }
++}
++
++const internals = {
++    users: [],
++    nextId: 1,
++    async hashPassword(password) {
++
++        if (Bcrypt) {
++            return Bcrypt.hash(password, 10);
++        }
++
++        const salt = Crypto.randomBytes(16).toString('hex');
++        const hash = Crypto.scryptSync(password, salt, 64).toString('hex');
++        return `${salt}:${hash}`;
++    },
++    validationError(_request, h, err) {
++
++        return h.response({
++            statusCode: 400,
++            error: 'Bad Request',
++            message: '请求体校验失败',
++            details: err.details
++        }).code(400).takeover();
++    },
++    sanitizeUser(user) {
++
++        return {
++            id: user.id,
++            username: user.username,
++            email: user.email
++        };
++    },
++    reset() {
++
++        internals.users.length = 0;
++        internals.nextId = 1;
++    }
++};
++
++const routes = [
++    {
++        method: 'POST',
++        path: '/api/register',
++        options: {
++            auth: false,
++            validate: {
++                validator: Joi,
++                options: {
++                    abortEarly: false
++                },
++                payload: Joi.object({
++                    username: Joi.string().min(3).required(),
++                    email: Joi.string().email().required(),
++                    password: Joi.string().min(6).required()
++                }),
++                failAction: internals.validationError
++            }
++        },
++        handler: async (request, h) => {
++
++            const { username, email, password } = request.payload;
++            const passwordHash = await internals.hashPassword(password);
++            const user = {
++                id: internals.nextId++,
++                username,
++                email,
++                passwordHash
++            };
++
++            internals.users.push(user);
++
++            return h.response(internals.sanitizeUser(user)).code(201);
++        }
++    }
++];
++
++module.exports = routes;
++module.exports.reset = internals.reset;
++module.exports.users = internals.users;
+diff --git a/test/register.js b/test/register.js
+new file mode 100644
+index 00000000..2b27fe07
+--- /dev/null
++++ b/test/register.js
+@@ -0,0 +1,92 @@
++'use strict';
++
++const Code = require('@hapi/code');
++const Hapi = require('..');
++const Lab = require('@hapi/lab');
++const UserRoutes = require('../routes/user');
++
++
++const internals = {
++    createServer() {
++
++        const server = Hapi.server();
++        UserRoutes.reset();
++        server.route(UserRoutes);
++        return server;
++    }
++};
++
++
++const { describe, it } = exports.lab = Lab.script();
++const expect = Code.expect;
++
++
++describe('register route', () => {
++
++    it('registers a user successfully', async () => {
++
++        const server = internals.createServer();
++        const payload = {
++            username: 'tester',
++            email: 'tester@example.com',
++            password: 'secret123'
++        };
++
++        const res = await server.inject({
++            method: 'POST',
++            url: '/api/register',
++            payload
++        });
++
++        expect(res.statusCode).to.equal(201);
++        expect(res.result).to.equal({
++            id: 1,
++            username: 'tester',
++            email: 'tester@example.com'
++        });
++        expect(res.result.password).to.not.exist();
++        expect(UserRoutes.users).to.have.length(1);
++        expect(UserRoutes.users[0].passwordHash).to.exist();
++        expect(UserRoutes.users[0].passwordHash).to.not.equal(payload.password);
++    });
++
++    it('rejects an invalid email address', async () => {
++
++        const server = internals.createServer();
++
++        const res = await server.inject({
++            method: 'POST',
++            url: '/api/register',
++            payload: {
++                username: 'tester',
++                email: 'invalid-email',
++                password: 'secret123'
++            }
++        });
++
++        expect(res.statusCode).to.equal(400);
++        expect(res.result.message).to.equal('请求体校验失败');
++        expect(res.result.details).to.have.length(1);
++        expect(res.result.details[0].message).to.contain('email');
++    });
++
++    it('rejects a username shorter than 3 characters', async () => {
++
++        const server = internals.createServer();
++
++        const res = await server.inject({
++            method: 'POST',
++            url: '/api/register',
++            payload: {
++                username: 'ab',
++                email: 'tester@example.com',
++                password: 'secret123'
++            }
++        });
++
++        expect(res.statusCode).to.equal(400);
++        expect(res.result.message).to.equal('请求体校验失败');
++        expect(res.result.details).to.have.length(1);
++        expect(res.result.details[0].message).to.contain('username');
++    });
++});
