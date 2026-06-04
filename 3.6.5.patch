@@ -1,0 +1,167 @@
+diff --git a/routes/user.js b/routes/user.js
+new file mode 100644
+index 00000000..8ea2ccad
+--- /dev/null
++++ b/routes/user.js
+@@ -0,0 +1,40 @@
++'use strict';
++
++const UserModule = exports;
++
++exports.getUserFromToken = async (token) => {
++
++    const validToken = 'Bearer valid-token-123';
++    if (token === validToken) {
++        return { id: 1, name: 'John Doe', email: 'john@example.com' };
++    }
++
++    return null;
++};
++
++exports.register = async (server, options) => {
++
++    server.route({
++        method: 'GET',
++        path: '/api/user/profile',
++        options: {
++            auth: false,
++            handler: async (request, h) => {
++
++                const token = request.headers.authorization;
++
++                if (!token) {
++                    return h.response({ message: 'Missing authentication token' }).code(401);
++                }
++
++                const user = await UserModule.getUserFromToken(token);
++
++                if (!user) {
++                    return h.response({ message: 'User not found' }).code(404);
++                }
++
++                return h.response({ user }).code(200);
++            }
++        }
++    });
++};
+diff --git a/test/user.js b/test/user.js
+new file mode 100644
+index 00000000..e5cc3ad8
+--- /dev/null
++++ b/test/user.js
+@@ -0,0 +1,115 @@
++'use strict';
++
++const Code = require('@hapi/code');
++const Hapi = require('..');
++const Lab = require('@hapi/lab');
++const Sinon = require('sinon');
++
++const UserRoute = require('../routes/user');
++
++
++const internals = {};
++
++
++const { describe, it, beforeEach, afterEach } = exports.lab = Lab.script();
++const expect = Code.expect;
++
++
++describe('GET /api/user/profile', () => {
++
++    let server;
++    let getUserFromTokenStub;
++
++    beforeEach(() => {
++
++        server = Hapi.server();
++        getUserFromTokenStub = Sinon.stub(UserRoute, 'getUserFromToken');
++    });
++
++    afterEach(() => {
++
++        Sinon.restore();
++        server = null;
++    });
++
++    it('returns 401 when no token is provided', async () => {
++
++        await server.register(UserRoute);
++
++        const res = await server.inject({
++            method: 'GET',
++            url: '/api/user/profile'
++        });
++
++        expect(res.statusCode).to.equal(401);
++        expect(res.result.message).to.equal('Missing authentication token');
++    });
++
++    it('returns 404 when token is invalid', async () => {
++
++        getUserFromTokenStub.resolves(null);
++
++        await server.register(UserRoute);
++
++        const res = await server.inject({
++            method: 'GET',
++            url: '/api/user/profile',
++            headers: {
++                authorization: 'Bearer invalid-token'
++            }
++        });
++
++        expect(res.statusCode).to.equal(404);
++        expect(res.result.message).to.equal('User not found');
++        Sinon.assert.calledOnce(getUserFromTokenStub);
++        Sinon.assert.calledWith(getUserFromTokenStub, 'Bearer invalid-token');
++    });
++
++    it('returns 404 when token is valid but user does not exist', async () => {
++
++        getUserFromTokenStub.resolves(null);
++
++        await server.register(UserRoute);
++
++        const res = await server.inject({
++            method: 'GET',
++            url: '/api/user/profile',
++            headers: {
++                authorization: 'Bearer valid-token-but-no-user'
++            }
++        });
++
++        expect(res.statusCode).to.equal(404);
++        expect(res.result.message).to.equal('User not found');
++        Sinon.assert.calledOnce(getUserFromTokenStub);
++    });
++
++    it('returns 200 with user profile when token is valid and user exists', async () => {
++
++        const mockUser = {
++            id: 1,
++            name: 'John Doe',
++            email: 'john@example.com'
++        };
++
++        getUserFromTokenStub.resolves(mockUser);
++
++        await server.register(UserRoute);
++
++        const res = await server.inject({
++            method: 'GET',
++            url: '/api/user/profile',
++            headers: {
++                authorization: 'Bearer valid-token-123'
++            }
++        });
++
++        expect(res.statusCode).to.equal(200);
++        expect(res.result.user).to.exist();
++        expect(res.result.user.id).to.equal(1);
++        expect(res.result.user.name).to.equal('John Doe');
++        expect(res.result.user.email).to.equal('john@example.com');
++        Sinon.assert.calledOnce(getUserFromTokenStub);
++        Sinon.assert.calledWith(getUserFromTokenStub, 'Bearer valid-token-123');
++    });
++});
