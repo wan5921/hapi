@@ -1,0 +1,69 @@
+const Hapi = require('@hapi/hapi');
+
+// 1 & 2. 更新的 validate 函数
+const validate = async (decoded, request, h) => {
+  try {
+    // 验证 request.headers.authorization 严格匹配 Bearer <token> 格式
+    // 正则解析：必须以 "Bearer "（注意大小写和唯一的空格）开头，且后面紧跟不包含空格的 token 字符串
+    const authHeader = request.headers.authorization;
+    if (!authHeader || !/^Bearer [^\s]+$/.test(authHeader)) {
+      return { isValid: false };
+    }
+
+    // 此处执行你的异步验证逻辑（例如查询数据库）
+    // const user = await db.users.findById(decoded.id);
+    // if (!user) {
+    //   return { isValid: false };
+    // }
+
+    // 验证通过
+    return { isValid: true };
+  } catch (error) {
+    // 捕获异步错误（如数据库查询异常），失败时返回 { isValid: false }
+    console.error('JWT Validation Error:', error);
+    return { isValid: false };
+  }
+};
+
+const init = async () => {
+  const server = Hapi.server({
+    port: 3000,
+    host: 'localhost'
+  });
+
+  // 注册 hapi-auth-jwt2 插件
+  await server.register(require('hapi-auth-jwt2'));
+
+  // 配置 JWT 策略
+  server.auth.strategy('jwt', 'jwt', {
+    key: 'your_secret_key', 
+    validate: validate, // 绑定修改后的 validate 函数
+    verifyOptions: { algorithms: ['HS256'] }
+  });
+
+  // 3. 确认受保护路由已配置 auth: 'jwt'
+  server.route({
+    method: 'GET',
+    path: '/api/protected',
+    config: {
+      auth: 'jwt', // <--- 关键配置：确保该路由启用 jwt 验证
+      description: '受保护的测试路由'
+    },
+    handler: async (request, h) => {
+      return { 
+        success: true, 
+        message: '你已成功访问受保护的路由！' 
+      };
+    }
+  });
+
+  await server.start();
+  console.log('Server running on %s', server.info.uri);
+};
+
+process.on('unhandledRejection', (err) => {
+  console.log(err);
+  process.exit(1);
+});
+
+init();
